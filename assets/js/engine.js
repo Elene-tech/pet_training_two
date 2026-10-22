@@ -410,7 +410,7 @@
       cnt.textContent = (i + 1) + ' / ' + items.length;
       bq.textContent = '';
       bq.append(h('span', { class: 'bqn' }, 'Question ' + (i + 1)), h('span', null, it.q));
-      ideas.textContent = ''; if (it.ideas) { ideas.append(h('span', { class: 'note-sm', style: 'color:#CFE0D6;align-self:center' }, 'Think about:'), it.ideas.map((x) => h('span', { class: 'idea' }, x))); }
+      ideas.textContent = ''; if (it.ideas) { ideas.append(h('span', { class: 'note-sm', style: 'color:#CFE0D6;align-self:center' }, 'Think about:'), ...it.ideas.map((x) => h('span', { class: 'idea' }, x))); }
       more.hidden = true; more.textContent = ''; if (it.more) { more.append(h('b', null, 'Follow-up: '), it.more); moreBtn.hidden = false; } else moreBtn.hidden = true;
     }
     draw();
