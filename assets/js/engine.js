@@ -9,8 +9,9 @@
     const raw = localStorage.getItem(KEY);
     if (raw) { const o = JSON.parse(raw); for (const k in o) S[k] = o[k]; }
   } catch (e) {}
-  let saveT = null;
+  let saveT = null, wiped = false;
   function save() {
+    if (wiped) return;
     clearTimeout(saveT);
     saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 150);
   }
@@ -70,13 +71,14 @@
       tip ? h('p', { class: 'tip' }, h('b', null, 'Совет: '), tip) : null);
   }
 
+  function markSel(wrap, L) { $$('label', wrap).forEach((l) => l.classList.toggle('sel', l.dataset.l === L)); }
   function optionList(qid, opts, cls) {
-    const wrap = h('div', { class: 'opts ' + (cls || ''), role: 'radiogroup' });
+    const wrap = h('div', { class: 'opts ' + (cls || ''), role: 'radiogroup', 'aria-label': 'Question ' + qid.slice(1) });
     opts.forEach(([L, txt]) => {
       const inp = h('input', { type: 'radio', name: qid, value: L });
       if (S.a[qid] === L) inp.checked = true;
-      inp.addEventListener('change', () => { S.a[qid] = L; save(); onAnswer(qid); });
-      wrap.append(h('label', { class: 'opt', dataset: { l: L } }, inp, h('span', { class: 'ltr' }, L), h('span', null, txt)));
+      inp.addEventListener('change', () => { S.a[qid] = L; markSel(wrap, L); save(); onAnswer(qid); });
+      wrap.append(h('label', { class: 'opt' + (S.a[qid] === L ? ' sel' : ''), dataset: { l: L } }, inp, h('span', { class: 'ltr' }, L), h('span', null, txt)));
     });
     return wrap;
   }
@@ -85,10 +87,20 @@
     letters.forEach((L) => {
       const inp = h('input', { type: 'radio', name: qid, value: L });
       if (S.a[qid] === L) inp.checked = true;
-      inp.addEventListener('change', () => { S.a[qid] = L; save(); onAnswer(qid); });
-      wrap.append(h('label', { class: 'chip', dataset: { l: L } }, inp, L));
+      inp.addEventListener('change', () => { S.a[qid] = L; markSel(wrap, L); save(); onAnswer(qid); });
+      wrap.append(h('label', { class: 'chip' + (S.a[qid] === L ? ' sel' : ''), dataset: { l: L } }, inp, L));
     });
     return wrap;
+  }
+  /* two-click confirmation instead of confirm() (dialogs are blocked in some in-app browsers) */
+  function twoClick(label, confirmLabel, action, cls) {
+    let armed = false, tm = null;
+    const b = h('button', { class: cls || 'btn ghost', type: 'button' }, label);
+    b.addEventListener('click', () => {
+      if (!armed) { armed = true; b.textContent = confirmLabel; b.classList.add('armed'); tm = setTimeout(() => { armed = false; b.textContent = label; b.classList.remove('armed'); }, 3500); return; }
+      clearTimeout(tm); armed = false; action();
+    });
+    return b;
   }
 
   const refreshers = {};
@@ -136,7 +148,7 @@
       out.className = 'score' + (s ? (s[0] / s[1] >= 0.7 ? ' good' : ' mid') : '');
     };
     const check = h('button', { class: 'btn primary', type: 'button', onclick: () => { grade(); show(); save(); updateProgress(); const f = $('.score', $('#p-' + part)); if (f) f.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, 'Проверить ответы');
-    const rst = h('button', { class: 'btn ghost', type: 'button', onclick: () => { if (confirm('Сбросить ответы этой части?')) resetPart(part); } }, 'Сбросить часть');
+    const rst = twoClick('Сбросить часть', 'Нажми ещё раз — ответы сотрутся', () => resetPart(part));
     show();
     return h('div', { class: 'bar' }, check, rst, out);
   }
@@ -144,7 +156,7 @@
   function qCard(it, visual, opts) {
     const id = 'q' + it.n;
     const card = h('article', { class: 'q', id: 'card-' + id });
-    card.append(h('div', { class: 'qn' }, it.n));
+    card.append(h('div', { class: 'qn' }, it.n), h('div', { class: 'qlab' }, 'Question ' + it.n));
     const right = h('div', { class: 'qright' });
     if (it.q) right.append(h('p', { class: 'qtext' }, it.q));
     right.append(optionList(id, it.opts, it.boxes ? 'boxes' : ''));
@@ -169,7 +181,7 @@
     const list = h('div', { class: 'qlist' });
     d.items.forEach((it) => list.append(qCard(it, stim(it))));
     root.append(list);
-    if (S.checked.r1) gradeChoice('r1', d.items);
+    if (S.checked.r1) defer(() => gradeChoice('r1', d.items));
     root.append(bottomBar('r1', () => gradeChoice('r1', d.items)));
     return root;
   }
@@ -185,7 +197,7 @@
       const card = h('article', { class: 'q people', id: 'card-q' + p.n });
       card.append(
         h('div', { class: 'person-top' }, h('div', { class: 'qn' }, p.n), h('div', { class: 'av', style: 'background:' + colors[i % 5] }, p.name[0]),
-          h('div', null, h('b', null, p.name), h('p', { style: 'margin:.2em 0 0;font-size:1.05rem' }, p.text))),
+          h('div', null, h('div', { class: 'qlab' }, 'Question ' + p.n + ' · ' + p.name), h('p', { style: 'margin:.2em 0 0;font-size:1.05rem' }, p.text))),
         chipRow('q' + p.n, 'ABCDEFGH'.split('')), h('p', { class: 'why', hidden: true }));
       people.append(card);
     });
@@ -194,7 +206,7 @@
     root.append(h('div', { class: 'two' },
       h('div', null, people),
       h('div', { class: 'sticky reverse-m' }, h('div', { class: 'card' }, h('h3', null, d.listTitle), texts))));
-    if (S.checked.r2) gradeChoice('r2', d.people);
+    if (S.checked.r2) defer(() => gradeChoice('r2', d.people));
     root.append(bottomBar('r2', () => gradeChoice('r2', d.people)));
     return root;
   }
@@ -207,7 +219,7 @@
     const qs = h('div', { class: 'qlist' });
     d.qs.forEach((q) => qs.append(qCard(q, null)));
     root.append(h('div', { class: 'two' }, h('div', { class: 'sticky' }, art), qs));
-    if (S.checked.r3) gradeChoice('r3', d.qs);
+    if (S.checked.r3) defer(() => gradeChoice('r3', d.qs));
     root.append(bottomBar('r3', () => gradeChoice('r3', d.qs)));
     return root;
   }
@@ -227,13 +239,12 @@
     const rows = h('div', { class: 'gaprows' });
     const items = Object.keys(d.keys).map(Number).sort((a, b) => a - b).map((n) => ({ n, ans: d.keys[n], why: d.why[n] }));
     items.forEach((it) => {
-      const card = h('article', { class: 'q mini', id: 'card-q' + it.n }, h('div', { class: 'qn' }, it.n), chipRow('q' + it.n, 'ABCDEFGH'.split('')), h('p', { class: 'why', hidden: true }));
+      const card = h('article', { class: 'q mini', id: 'card-q' + it.n }, h('div', { class: 'qn' }, it.n), h('div', { class: 'qlab' }, 'Question ' + it.n + ' — choose the sentence for gap ' + it.n), chipRow('q' + it.n, 'ABCDEFGH'.split('')), h('p', { class: 'why', hidden: true }));
       rows.append(card);
       refreshers['q' + it.n] = () => refreshGap4(d, it);
     });
     root.append(h('div', { class: 'two' }, h('div', null, art, rows), h('div', { class: 'sticky reverse-m' }, sent)));
-    items.forEach((it) => refreshGap4(d, it));
-    if (S.checked.r4) gradeChoice('r4', items);
+    defer(() => { items.forEach((it) => refreshGap4(d, it)); if (S.checked.r4) gradeChoice('r4', items); });
     root.append(bottomBar('r4', () => gradeChoice('r4', items)));
     return root;
   }
@@ -265,8 +276,7 @@
       refreshers['q' + q.n] = () => refreshGap5(d, q);
     });
     root.append(h('div', { class: 'two' }, h('div', { class: 'sticky' }, art), qs));
-    d.qs.forEach((q) => refreshGap5(d, q));
-    if (S.checked.r5) gradeChoice('r5', d.qs);
+    defer(() => { d.qs.forEach((q) => refreshGap5(d, q)); if (S.checked.r5) gradeChoice('r5', d.qs); });
     root.append(bottomBar('r5', () => gradeChoice('r5', d.qs)));
     return root;
   }
@@ -288,10 +298,10 @@
       const para = h('p');
       p.forEach((seg) => {
         if (typeof seg === 'number') {
-          const inp = h('input', { class: 'gapin', type: 'text', placeholder: String(seg), 'aria-label': 'Gap ' + seg, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', id: 'in-' + seg });
+          const inp = h('input', { class: 'gapin', type: 'text', 'aria-label': 'Question ' + seg, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', id: 'in-' + seg });
           inp.value = S.a['q' + seg] || '';
           inp.addEventListener('input', () => { S.a['q' + seg] = inp.value; save(); updateProgress(); });
-          para.append(inp);
+          para.append(h('span', { class: 'gwrap' }, h('span', { class: 'gbadge' }, seg), inp));
         } else para.append(seg);
       });
       art.append(para);
@@ -311,7 +321,7 @@
       });
       S.score.r6 = [got, items.length]; S.checked.r6 = true;
     };
-    if (S.checked.r6) grade();
+    if (S.checked.r6) defer(grade);
     root.append(bottomBar('r6', grade));
     return root;
   }
@@ -398,7 +408,8 @@
       const it = items[order[i]];
       who.textContent = opts.addressee ? 'Question for: ' + NAMES[i % 2] : opts.label;
       cnt.textContent = (i + 1) + ' / ' + items.length;
-      bq.textContent = it.q;
+      bq.textContent = '';
+      bq.append(h('span', { class: 'bqn' }, 'Question ' + (i + 1)), h('span', null, it.q));
       ideas.textContent = ''; if (it.ideas) { ideas.append(h('span', { class: 'note-sm', style: 'color:#CFE0D6;align-self:center' }, 'Think about:'), it.ideas.map((x) => h('span', { class: 'idea' }, x))); }
       more.hidden = true; more.textContent = ''; if (it.more) { more.append(h('b', null, 'Follow-up: '), it.more); moreBtn.hidden = false; } else moreBtn.hidden = true;
     }
@@ -433,8 +444,11 @@
   function photoCard(who, ph, num) {
     const modelEl = h('div', { class: 'model', hidden: true }, h('h4', null, 'Образец ответа (прочитай ПОСЛЕ того, как поговорил)'), h('p', null, ph.model));
     const tgl = h('button', { class: 'btn ghost small', type: 'button', onclick: () => { modelEl.hidden = !modelEl.hidden; tgl.textContent = modelEl.hidden ? 'Показать образец' : 'Скрыть образец'; } }, 'Показать образец');
-    const img = h('img', { src: ph.img, alt: ph.alt, loading: 'lazy' });
-    const pimg = h('div', { class: 'pimg', onclick: () => openPhoto(ph.img, ph.alt), role: 'button', tabindex: '0', 'aria-label': 'Увеличить фото', onkeydown: (e) => { if (e.key === 'Enter') openPhoto(ph.img, ph.alt); } }, img, h('span', { class: 'zoom' }, '🔍 увеличить'));
+    const key = String(ph.img || '').split('/').pop().replace(/\.\w+$/, '');
+    const src = (window.PET_IMG && window.PET_IMG[key]) || ph.img;
+    const img = h('img', { src, alt: ph.alt });
+    const pimg = h('div', { class: 'pimg', onclick: () => openPhoto(src, ph.alt), role: 'button', tabindex: '0', 'aria-label': 'Увеличить фото', onkeydown: (e) => { if (e.key === 'Enter') openPhoto(src, ph.alt); } }, img, h('span', { class: 'zoom' }, '🔍 увеличить'));
+    img.addEventListener('error', () => { pimg.className = 'pimg nophoto'; pimg.onclick = null; pimg.removeAttribute('role'); pimg.textContent = ''; pimg.append(h('div', { class: 'noph' }, '📷 Photo: ' + ph.alt)); });
     return h('div', { class: 'pcard' },
       h('div', { class: 'phead2' }, h('b', null, who), h('span', null, 'Photo ' + num)),
       pimg,
@@ -451,13 +465,41 @@
     $('img', lb).src = src; $('img', lb).alt = alt || ''; lb.hidden = false;
   }
 
+  const PH_COLLAB = ['How about…?', 'What do you think about…?', 'I think … would be better because…', 'That’s a good idea, but…', 'I’m not sure that…', 'Shall we choose…?', 'Let’s decide on…', 'I agree / I see what you mean, but…', 'It depends on… / It would be more…than…'];
+  function collab(c, k) {
+    const root = h('div', { class: 'collab' });
+    const opts = h('div', { class: 'cgrid' }, c.options.map((o, i) => h('div', { class: 'copt' }, h('span', { class: 'cnum' }, i + 1), h('span', { class: 'cico', 'aria-hidden': 'true' }, o.icon), h('span', { class: 'clabel' }, o.label))));
+    const modelAsk = h('div', { class: 'examiner' },
+      h('h4', null, 'Examiner’s instructions · Step 1 (about 2 minutes)'),
+      h('p', null, '“I’m going to describe a situation to you.”'),
+      h('p', { class: 'cbig' }, c.scenario),
+      h('p', null, '“' + c.task + '”'),
+      miniTimer(120));
+    const step2 = h('div', { class: 'examiner s2' },
+      h('h4', null, 'Step 2 (about 1 minute)'),
+      h('p', null, '“Now decide together which one would be the best.”'),
+      miniTimer(60));
+    const asks = h('div', { class: 'examiner s3' }, h('h4', null, 'Follow-up questions (Part 3 → Part 4 link)'),
+      h('ol', null, c.ask.map((q) => h('li', null, q))));
+    const phr = h('div', { class: 'card' }, h('h4', null, '💬 Useful phrases'), h('div', { class: 'ideas dark' }, PH_COLLAB.map((x) => h('span', { class: 'idea2' }, x))));
+    root.append(h('div', { class: 'cscen' }, h('div', { class: 'ckick' }, 'Part 3 · Task ' + (k + 1) + ' · ' + c.title), h('p', { class: 'cbig' }, c.scenario)), opts, h('div', { class: 'cols2' }, h('div', null, modelAsk, step2), h('div', null, asks, phr)));
+    return root;
+  }
+
   function renderS() {
     const sp = T.speaking, root = h('div');
-    root.append(partHead('Speaking · about 12 minutes', 'Speaking', 'Parts 1, 3 and 4 — работаете в паре: ' + NAMES.join(' и ') + '.', 'Отвечай развёрнуто: ответ + причина + пример. Партнёр слушает и потом сам отвечает на вопрос по твоему фото. Цель Part 4 — разговор, а не два монолога.'));
+    root.append(partHead('Speaking · about 12 minutes', 'Speaking', 'Parts 1, 3 and 4 — работаете в паре: ' + NAMES.join(' и ') + '.', 'Part 3 — вы обсуждаете варианты ВМЕСТЕ и вдвоём принимаете решение (не два монолога). Отвечай развёрнуто: ответ + причина + пример.'));
     const sub = h('div', { class: 'subnav', role: 'tablist' }), box = h('div');
     const secs = [
       ['Part 1 · Interview', () => h('div', null, h('p', { class: 'qtext' }, 'Part 1 — personal questions (2–3 min). Вопросы по очереди: сначала ' + NAMES[0] + ', потом ' + NAMES[1] + '. Нажми «Follow-up», чтобы получить дополнительный вопрос.'), deck(sp.p1, { addressee: true }))],
-      ['Part 3 · Photos', () => {
+      ['Part 3 · Discuss & decide', () => {
+        const wrap = h('div'); const cs = sp.collab;
+        const rsub = h('div', { class: 'subnav' }), rbox = h('div');
+        const showC = (k) => { $$('button', rsub).forEach((b, j) => b.setAttribute('aria-selected', j === k)); rbox.textContent = ''; rbox.append(collab(cs[k], k)); };
+        cs.forEach((c, k) => rsub.append(h('button', { class: 'pill', type: 'button', 'aria-selected': 'false', onclick: () => showC(k) }, 'Task ' + (k + 1) + ' · ' + c.theme)));
+        wrap.append(h('p', { class: 'qtext' }, 'Part 3 — collaborative task (2–3 min). Обсудите варианты вместе, потом решите, какой лучший. Варианты ниже заменяют картинки.'), rsub, rbox); showC(0); return wrap;
+      }],
+      ['Photos (bonus)', () => {
         const wrap = h('div'); const rs = sp.rounds;
         const rsub = h('div', { class: 'subnav' }), rbox = h('div');
         const showR = (k) => { $$('button', rsub).forEach((b, j) => b.setAttribute('aria-selected', j === k)); rbox.textContent = ''; const r = rs[k]; rbox.append(h('p', { class: 'qtext' }, 'Round ' + (k + 1) + ' · Topic: ' + r.theme + '. Look at your photo and describe it. The other student listens.'), h('div', { class: 'photos' }, photoCard(NAMES[0], r.A, 'A'), photoCard(NAMES[1], r.B, 'B'))); };
@@ -492,7 +534,7 @@
           inp.addEventListener('change', () => { S.sp.self[key] = v; save(); });
           r.append(h('label', null, inp, String(v)));
         }
-        tr.append(h('td', null, r));
+        tr.append(h('td', { dataset: { label: n } }, r));
       });
       tb.append(tr);
     });
@@ -502,9 +544,13 @@
 
   /* ---------- Results ---------- */
   function copyText(txt) {
-    try { navigator.clipboard.writeText(txt); } catch (e) {
-      const ta = h('textarea', { style: 'position:fixed;opacity:0' }); ta.value = txt; document.body.append(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove();
-    }
+    const fallback = () => {
+      const ta = h('textarea', { style: 'position:fixed;opacity:0;left:0;top:0' }); ta.value = txt; document.body.append(ta); ta.focus(); ta.select();
+      try { document.execCommand('copy'); } catch (e2) {} ta.remove();
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(fallback); else fallback();
+    } catch (e) { fallback(); }
   }
   function totals() {
     let got = 0, max = 0; const rows = [];
@@ -540,13 +586,21 @@
       h('p', null, 'Writing: Part 1 — ', h('b', null, w1 + ' слов'), ' · Part 2 — ', h('b', null, w2 + ' слов'), '. Speaking: самооценка заполняется в разделе Speaking.'),
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', type: 'button', onclick: (e) => { copyText(summaryText()); e.target.textContent = 'Скопировано ✓ — отправь преподавателю'; } }, 'Скопировать результат'),
-        h('button', { class: 'btn ghost', type: 'button', onclick: () => { if (confirm('Стереть ВСЕ ответы и тексты этого теста?')) { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); } } }, 'Начать тест заново'))));
+        twoClick('Начать тест заново', 'Нажми ещё раз — сотрутся ВСЕ ответы', () => { wiped = true; clearTimeout(saveT); try { localStorage.removeItem(KEY); } catch (e) {} try { history.replaceState(null, '', location.pathname); } catch (e) {} location.reload(); }))));
     return root;
   }
 
   /* ---------- shell ---------- */
   const RENDER = { r1: renderR1, r2: renderR2, r3: renderR3, r4: renderR4, r5: renderR5, r6: renderR6, w: renderW, s: renderS, res: renderRes };
-  function mount(id) { const p = $('#p-' + id); if (!p) return; p.textContent = ''; p.append(RENDER[id]()); }
+  /* Restoring saved/checked state needs the nodes to be in the document, so it is deferred until after append. */
+  let later = [];
+  function defer(fn) { later.push(fn); }
+  function mount(id) {
+    const p = $('#p-' + id); if (!p) return;
+    p.textContent = ''; later = [];
+    p.append(RENDER[id]());
+    const q = later; later = []; q.forEach((f) => { try { f(); } catch (e) { if (window.console) console.error(e); } });
+  }
 
   function updateProgress() {
     let answered = 0;
@@ -586,7 +640,7 @@
     const app = $('#app');
     app.append(
       h('div', { class: 'top' }, h('div', { class: 'top-in' },
-        h('a', { class: 'brand', href: './', 'aria-label': 'К списку тестов' }, h('span', { class: 'mark' }, 'TE'), h('span', null, h('b', null, T.title), h('small', null, 'Target English · B1 Preliminary'))),
+        h('a', { class: 'brand', href: 'index.html', 'aria-label': 'К списку тестов' }, h('span', { class: 'mark' }, 'TE'), h('span', null, h('b', null, T.title), h('small', null, 'Target English · B1 Preliminary'))),
         h('div', { class: 'prog' }, h('span', { id: 'progtxt' }, ''), h('div', { class: 'bar-bg' }, h('div', { class: 'bar-fg' }))),
         headerTimer())),
       h('nav', { class: 'nav', 'aria-label': 'Части теста' }, h('div', { class: 'nav-in', role: 'tablist' },

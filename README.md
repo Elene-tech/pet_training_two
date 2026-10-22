@@ -1,6 +1,6 @@
 # PET Training — Target English
 
-Два полных тренировочных теста в формате Cambridge B1 Preliminary (PET): Reading (6 частей, 32 вопроса), Writing (Part 1 + Part 2), Speaking (Parts 1, 3, 4 с фотографиями).
+Два полных тренировочных теста в формате Cambridge B1 Preliminary (PET): Reading (6 частей, 32 вопроса), Writing (Part 1 + Part 2), Speaking (Part 1 — интервью, Part 3 — совместное задание «обсудите и решите», Part 4 — дискуссия; плюс бонус: описание фото).
 
 Обычный статический сайт: никаких сборок, npm и серверов. Шрифты подгружаются с Google Fonts (без них сайт тоже работает, просто с системными шрифтами).
 
@@ -13,8 +13,9 @@ test2.html            — Preliminary Test 2
 vercel.json           — настройки Vercel (чистые URL, кэш)
 assets/css/style.css  — фирменные стили
 assets/js/engine.js   — общий движок (проверка, таймеры, Writing, Speaking)
-assets/js/test1-data.js, test2-data.js — тексты, ключи, объяснения, образцы
-assets/img/speaking/  — 8 фото для Speaking Part 3
+assets/js/test1-data.js, test2-data.js — тексты, ключи, объяснения, образцы, задания Speaking
+assets/js/images.js   — фото для бонусного раздела (встроены в код, всегда загружаются)
+assets/img/speaking/  — те же 8 фото отдельными файлами (запасной вариант)
 ```
 
 ## Как выложить
@@ -32,6 +33,6 @@ assets/img/speaking/  — 8 фото для Speaking Part 3
 
 ## Как править содержание
 
-Все тексты находятся в `assets/js/test1-data.js` и `test2-data.js`. Имена учеников — поле `names` в начале файла. Фото для Speaking — в `assets/img/speaking/` (укажите путь в разделе `speaking.rounds`).
+Все тексты находятся в `assets/js/test1-data.js` и `test2-data.js`. Имена учеников — поле `names` в начале файла. Speaking Part 3 — в разделе `speaking.collab` (ситуация, 5 вариантов, вопросы экзаменатора). Фото-бонус — `speaking.rounds`.
 
 Ответы и тексты учеников сохраняются только в браузере (localStorage) и никуда не отправляются. Кнопка «Скопировать результат» на вкладке «Итог» формирует краткий отчёт для преподавателя.
